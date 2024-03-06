@@ -45,11 +45,11 @@ abstract class PhpAttributeStrategy extends Strategy
             ->map(fn(ReflectionAttribute $a) => $a->newInstance())->all();
 
         // If there's a FormRequest, we check there.
-        if ($formRequestClass = $this->getFormRequestReflectionClass($method)) {
-            $attributesOnFormRequest = collect(static::$attributeNames)
+        $attributesOnFormRequest = $this->getFormRequestReflectionClasses($method)->reduce(function ($carry, $formRequestClass) use ($method) {
+            return array_merge($carry, collect(static::$attributeNames)
                 ->flatMap(fn(string $name) => $formRequestClass->getAttributes($name, ReflectionAttribute::IS_INSTANCEOF))
-                ->map(fn(ReflectionAttribute $a) => $a->newInstance())->all();
-        }
+                ->map(fn(ReflectionAttribute $a) => $a->newInstance())->all());
+        }, []);
 
         if ($class) {
             $attributesOnController = collect(static::$attributeNames)

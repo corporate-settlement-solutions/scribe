@@ -585,7 +585,7 @@ class TestController extends Controller
     {
         return null;
     }
-    
+
     public function withInjectedModelFullParamName(TestPost $testPost)
     {
         return null;
@@ -599,6 +599,11 @@ class TestController extends Controller
             // Not full path class call won't work
             'enum_inexistent' => ['required', new Rules\Enum(TestStringBackedEnum::class)],
         ]);
+    }
+
+    public function withMultipleRequestObjects(TestMultipleRequestObjectsHasAuthorization $authorizer, TestMultipleRequestObjectsHasValidationRules $validator)
+    {
+        return null;
     }
 
     /**

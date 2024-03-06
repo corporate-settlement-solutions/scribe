@@ -27,35 +27,49 @@ class GetFromFormRequestBase extends Strategy
 
     public function getParametersFromFormRequest(ReflectionFunctionAbstract $method, Route $route): array
     {
-        if (!$formRequestReflectionClass = $this->getFormRequestReflectionClass($method)) {
+        $formRequestReflectionClasses = $this->getFormRequestReflectionClasses($method);
+        if ($formRequestReflectionClasses->isEmpty()) {
             return [];
         }
 
-        if (!$this->isFormRequestMeantForThisStrategy($formRequestReflectionClass)) {
-            return [];
-        }
-
-        $className = $formRequestReflectionClass->getName();
-
-        if (Globals::$__instantiateFormRequestUsing) {
-            $formRequest = call_user_func_array(Globals::$__instantiateFormRequestUsing, [$className, $route, $method]);
-        } else {
-            $formRequest = new $className;
-        }
-        // Set the route properly so it works for users who have code that checks for the route.
-        /** @var LaravelFormRequest|DingoFormRequest $formRequest */
-        $formRequest->setRouteResolver(function () use ($formRequest, $route) {
-            // Also need to bind the request to the route in case their code tries to inspect current request
-            return $route->bind($formRequest);
-        });
-        $formRequest->server->set('REQUEST_METHOD', $route->methods()[0]);
-
-        $parametersFromFormRequest = $this->getParametersFromValidationRules(
-            $this->getRouteValidationRules($formRequest),
-            $this->getCustomParameterData($formRequest)
+        $usable = $formRequestReflectionClasses->filter(
+            fn ($formRequestReflectionClass) => $this->isFormRequestMeantForThisStrategy($formRequestReflectionClass)
         );
 
-        return $this->normaliseArrayAndObjectParameters($parametersFromFormRequest);
+        if ($usable->isEmpty()) {
+            return [];
+        }
+
+        return $usable->map(function ($reflection) use ($route, $method) {
+            $className = $reflection->getName();
+
+            if (Globals::$__instantiateFormRequestUsing) {
+                return call_user_func_array(Globals::$__instantiateFormRequestUsing, [$className, $route, $method]);
+            }
+
+            return new $className;
+        })->each(function ($formRequest) use ($route) {
+            // Set the route properly so it works for users who have code that checks for the route.
+            /** @var LaravelFormRequest|DingoFormRequest $formRequest */
+            $formRequest->setRouteResolver(function () use ($formRequest, $route) {
+                // Also need to bind the request to the route in case their code tries to inspect current request
+                return $route->bind($formRequest);
+            });
+            $formRequest->server->set('REQUEST_METHOD', $route->methods()[0]);
+        })->reduce(function ($carry, $formRequest) {
+            $validationRules = collect($this->getRouteValidationRules($formRequest))->map(function ($rules, $key) {
+                if(is_string($rules)) {
+                    $rules = collect(explode('|', $rules))->toArray();
+                }
+                return $rules;
+            });
+            $parametersFromFormRequest = $this->getParametersFromValidationRules(
+                $validationRules->toArray(),
+                $this->getCustomParameterData($formRequest)
+            );
+
+            return array_merge($carry, $this->normaliseArrayAndObjectParameters($parametersFromFormRequest));
+        }, []);
     }
 
     /**
@@ -102,4 +116,3 @@ class GetFromFormRequestBase extends Strategy
     }
 
 }
-

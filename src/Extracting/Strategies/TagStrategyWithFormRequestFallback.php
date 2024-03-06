@@ -23,13 +23,19 @@ abstract class TagStrategyWithFormRequestFallback extends Strategy
     {
         $classTags = RouteDocBlocker::getDocBlocksFromRoute($route)['class']?->getTags() ?: [];
         // If there's a FormRequest, w.e check there for tags.
-        if ($formRequestClass = $this->getFormRequestReflectionClass($method)) {
+        $formRequestClasses = $this->getFormRequestReflectionClasses($method)->reduce(function ($carry, $formRequestClass) use ($classTags) {
             $formRequestDocBlock = new DocBlock($formRequestClass->getDocComment());
             $parametersFromFormRequest = $this->getFromTags($formRequestDocBlock->getTags(), $classTags);
 
             if (count($parametersFromFormRequest)) {
-                return $parametersFromFormRequest;
+                return $carry->merge($parametersFromFormRequest);
             }
+
+            return $carry;
+        }, collect());
+
+        if ($formRequestClasses->isNotEmpty()) {
+            return $formRequestClasses->toArray();
         }
 
         $methodDocBlock = RouteDocBlocker::getDocBlocksFromRoute($route)['method'];
